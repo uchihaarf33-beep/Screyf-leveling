@@ -1,0 +1,244 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Screyf RPG Tracker</title>
+<style>
+body{
+  font-family:Arial;
+  background:#050b1a;
+  color:#e6edff;
+  padding:15px;
+}
+.container{
+  max-width:800px;
+  margin:auto;
+  background:#071a33;
+  padding:15px;
+  border-radius:12px;
+}
+h1,h2{color:#4fc3ff;text-align:center;}
+.section{
+  background:#0b244d;
+  padding:12px;
+  border-radius:10px;
+  margin-bottom:15px;
+}
+.task{
+  background:#081c3a;
+  padding:10px;
+  border-radius:8px;
+  margin-bottom:10px;
+}
+button{
+  padding:6px 10px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+  font-weight:bold;
+}
+.btn-save{background:#7e57ff;color:#fff;}
+.btn-submit{background:#2ecc71;color:#000;}
+.btn-start{background:#8e44ad;color:#fff;}
+input[type=text],input[type=number]{
+  background:#020916;
+  color:#fff;
+  border:1px solid #3b5ca8;
+  border-radius:5px;
+  padding:4px;
+  margin:2px 0;
+}
+.timer{
+  color:#b388ff;
+  font-weight:bold;
+  margin-left:10px;
+}
+.alert{
+  margin-top:10px;
+  padding:8px;
+  text-align:center;
+  font-weight:bold;
+  border-radius:6px;
+}
+.good{background:#2ecc71;color:#000;}
+.bad{background:#e74c3c;}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>⚔️ Screyf RPG Tracker</h1>
+
+<!-- STATS -->
+<div class="section">
+<h2>Stats</h2>
+<p>Total EXP: <b><span id="exp">0</span></b></p>
+<p>Level: <b><span id="level">1</span></b></p>
+</div>
+
+<!-- TASK SETTINGS -->
+<div class="section">
+<h2>Task Settings (5 Tasks)</h2>
+<div id="taskSettings"></div>
+<button class="btn-save" onclick="saveTaskSettings()">Save Task Settings</button>
+</div>
+
+<!-- DAILY TASKS -->
+<div class="section">
+<h2>Daily Tasks</h2>
+<div id="tasks"></div>
+</div>
+
+<!-- ALERT -->
+<div id="msg" class="alert"></div>
+
+</div>
+
+<script>
+// ======== DATA ========
+let stats = JSON.parse(localStorage.getItem("stats")) || {exp:0,level:1};
+stats.exp = Number(stats.exp) || 0;
+stats.level = Number(stats.level) || 1;
+
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [
+ {name:"Fitness",exp:50,duration:0,start:null},
+ {name:"IQ Challenge",exp:40,duration:0,start:null},
+ {name:"Goal Work",exp:30,duration:0,start:null},
+ {name:"Reading",exp:20,duration:0,start:null},
+ {name:"Skill Practice",exp:60,duration:0,start:null}
+];
+
+let punishment = localStorage.getItem("punishment") || "50 pushups + no phone/entertainment 2 hours";
+
+// ======== INIT ========
+renderTaskSettings();
+renderTasks();
+updateStats();
+
+// ======== TASK SETTINGS ========
+function renderTaskSettings(){
+ let box=document.getElementById("taskSettings");
+ box.innerHTML="";
+ tasks.forEach((t,i)=>{
+  box.innerHTML+=`
+  <div class="task">
+   Task ${i+1} Name: <input type="text" id="name${i}" value="${t.name}">
+   EXP: <input type="number" id="exp${i}" value="${t.exp}">
+  </div>`;
+ });
+}
+
+function saveTaskSettings(){
+ tasks.forEach((t,i)=>{
+  t.name=document.getElementById("name"+i).value || t.name;
+  t.exp=parseFloat(document.getElementById("exp"+i).value) || t.exp;
+ });
+ localStorage.setItem("tasks",JSON.stringify(tasks));
+ renderTasks();
+ showMsg("✅ Task settings saved","good");
+}
+
+// ======== DAILY TASKS ========
+function renderTasks(){
+ let box=document.getElementById("tasks");
+ box.innerHTML="";
+ tasks.forEach((t,i)=>{
+  box.innerHTML+=`
+   <div class="task">
+    <label>
+      <input type="checkbox" id="chk${i}"> ${t.name} (+${t.exp} EXP)
+    </label>
+    <br><br>
+    Timer (optional):
+    <input type="number" id="min${i}" placeholder="Min" style="width:50px;"> :
+    <input type="number" id="sec${i}" placeholder="Sec" style="width:50px;">
+    <button class="btn-start" onclick="startTimer(${i})">Start</button>
+    <span class="timer" id="timer${i}">${format(0)}</span>
+    <br><br>
+    <button class="btn-submit" onclick="submitTask(${i})">Submit</button>
+   </div>`;
+ });
+}
+
+// ======== TIMER LOGIC ========
+setInterval(()=>{
+ tasks.forEach((t,i)=>{
+  if(t.start){
+   let r=remain(i);
+   document.getElementById("timer"+i).innerText=format(r);
+   if(r<=0) missTask(i);
+  }
+ });
+},1000);
+
+function startTimer(i){
+ let m=parseInt(document.getElementById("min"+i).value)||0;
+ let s=parseInt(document.getElementById("sec"+i).value)||0;
+ if(m+s<=0) return;
+ tasks[i].duration=m*60+s;
+ tasks[i].start=Date.now();
+ saveTasks();
+}
+
+function remain(i){
+ let t=tasks[i];
+ if(!t.start) return 0;
+ let passed=Math.floor((Date.now()-t.start)/1000);
+ return Math.max(t.duration-passed,0);
+}
+
+function format(sec){
+ let m=Math.floor(sec/60);
+ let s=sec%60;
+ return `${m}:${s<10?"0"+s:s}`;
+}
+
+// ======== SUBMIT / MISS LOGIC ========
+function submitTask(i){
+ let done=document.getElementById("chk"+i).checked;
+ finishTask(i,done);
+ document.getElementById("chk"+i).checked=false;
+}
+
+function missTask(i){
+ finishTask(i,false);
+ showMsg(`❌ ${tasks[i].name} missed! Punishment applied (-${(tasks[i].exp*0.05).toFixed(2)} EXP)`,"bad");
+}
+
+function finishTask(i,done){
+ tasks[i].start=null;
+ let change=done ? tasks[i].exp : -(tasks[i].exp*0.05);
+ stats.exp=Math.max(0,stats.exp+change);
+ stats.level=Math.floor(stats.exp/1000)+1;
+ saveAll();
+ updateStats();
+ if(done) showMsg(`✅ ${tasks[i].name} completed! +${tasks[i].exp} EXP`,"good");
+}
+
+// ======== HELPERS ========
+function updateStats(){
+ document.getElementById("exp").innerText=stats.exp.toFixed(2);
+ document.getElementById("level").innerText=stats.level;
+}
+
+function showMsg(text,type){
+ let m=document.getElementById("msg");
+ m.className="alert "+type;
+ m.innerText=text;
+ setTimeout(()=>{m.innerText="";},2500);
+}
+
+// ======== SAVE ========
+function saveAll(){
+ localStorage.setItem("stats",JSON.stringify(stats));
+ localStorage.setItem("tasks",JSON.stringify(tasks));
+}
+function saveTasks(){
+ localStorage.setItem("tasks",JSON.stringify(tasks));
+}
+</script>
+
+</body>
+</html>
+
